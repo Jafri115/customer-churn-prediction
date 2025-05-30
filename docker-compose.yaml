@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: churn_prediction_app
+    ports:
+      - "8000:8000" # Host:Container
+    volumes:
+      # For development, mount src to see code changes without rebuilding (remove for prod)
+      # - ./src:/app/src 
+      - ./models:/app/models # Mount models so they are accessible
+      - ./mlflow.db:/app/mlflow.db # If using local sqlite MLflow
+    environment:
+      PYTHONUNBUFFERED: 1
+      # MLFLOW_TRACKING_URI: "http://mlflow_server:5000" # If you set up a separate MLflow server
+    depends_on:
+      - prometheus # Optional, app will start even if prometheus is not ready
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.45.0 # Use a recent stable version
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:9.5.3 # Use a recent stable version
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana # Persistent storage for Grafana data
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin} # Change in production!
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  grafana_data: {}
