@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: churn-app-service
+spec:
+  selector:
+    app: churn-app
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 80          # external port inside cluster
+      targetPort: 8000  # port your app listens on inside pod
+      nodePort: 30080   # external port exposed by node

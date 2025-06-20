@@ -1,0 +1,13 @@
+pandas
+scikit-learn
+xgboost
+mlflow
+fastapi
+uvicorn[standard]
+joblib
+python-dotenv  
+requests      
+starlette-prometheus
+prometheus-client
+numpy
+prometheus-fastapi-instrumentator 

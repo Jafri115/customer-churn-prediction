@@ -1,0 +1,10 @@
+{
+  "Predicted_No": {
+    "Actual_No": 751,
+    "Actual_Yes": 74
+  },
+  "Predicted_Yes": {
+    "Actual_No": 284,
+    "Actual_Yes": 300
+  }
+}

@@ -1,0 +1,156 @@
+image: python:3.9-slim
+
+stages:
+  - setup
+  - build_artifacts
+  - test
+  - build_docker
+  - deploy # Placeholder for actual deployment
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  MODEL_DIR: "$CI_PROJECT_DIR/models"
+  DATA_DIR: "$CI_PROJECT_DIR/data"
+  PROCESSED_DATA_DIR: "$CI_PROJECT_DIR/data/processed"
+  MLFLOW_TRACKING_URI: "http://127.0.0.1:5000" # Use local DB for CI
+  GITLAB_IMAGE_NAME: $CI_REGISTRY_IMAGE
+
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+before_script:
+  - python -m venv venv
+  - source venv/bin/activate
+  - pip install --upgrade pip
+  - pip install -r requirements.txt
+  - pip install flake8 pytest # For linting and testing if you add tests
+
+setup_env:
+  stage: setup
+  script:
+    - echo "Setting up environment..."
+    - mkdir -p $MODEL_DIR
+    - mkdir -p $PROCESSED_DATA_DIR
+    # Download dataset if not present (example using wget)
+    # Replace with your actual Kaggle download command or ensure file is in repo
+    - |
+      if [ ! -f $DATA_DIR/Telco-Customer-Churn.csv ]; then
+        echo "Telco-Customer-Churn.csv not found. Please add it to the data/ directory or provide download command."
+        # Example: wget -P $DATA_DIR <URL_TO_DATASET_CSV> 
+        # For Kaggle, you might need to use the Kaggle API
+        # kaggle datasets download -d blastchar/telco-customer-churn -p $DATA_DIR --unzip
+        # For this example, we'll assume the file is present or create a dummy one.
+        echo "customerID,gender,SeniorCitizen,Partner,Dependents,tenure,PhoneService,MultipleLines,InternetService,OnlineSecurity,OnlineBackup,DeviceProtection,TechSupport,StreamingTV,StreamingMovies,Contract,PaperlessBilling,PaymentMethod,MonthlyCharges,TotalCharges,Churn" > $DATA_DIR/Telco-Customer-Churn.csv
+        echo "1234-ABCD,Male,0,Yes,No,12,Yes,No,DSL,Yes,Yes,No,No,No,No,Month-to-month,Yes,Electronic check,55.20,662.4,No" >> $DATA_DIR/Telco-Customer-Churn.csv
+        echo "5678-EFGH,Female,1,No,No,1,Yes,No,Fiber optic,No,No,No,No,No,No,Month-to-month,Yes,Electronic check,70.70,70.7,Yes" >> $DATA_DIR/Telco-Customer-Churn.csv
+      fi
+  artifacts:
+    paths:
+      - $DATA_DIR/Telco-Customer-Churn.csv
+    expire_in: 1 day
+
+preprocess_data:
+  stage: build_artifacts
+  script:
+    - echo "Running data preprocessing..."
+    - python -m src.preprocess
+  artifacts:
+    paths:
+      - $MODEL_DIR/preprocessor.pkl
+      - $PROCESSED_DATA_DIR/train.csv
+      - $PROCESSED_DATA_DIR/test.csv
+    expire_in: 1 day
+  needs:
+    - job: setup_env
+      artifacts: true
+
+train_model:
+  stage: build_artifacts
+  script:
+    - echo "Running model training..."
+    - mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 127.0.0.1 --port 5000 &
+    - sleep 10  # Give the server time to start
+    - python -m src.train
+  artifacts:
+    paths:
+      - $MODEL_DIR/churn_model_xgb.pkl
+      - $MODEL_DIR/churn_model_lr.pkl
+      - mlflow.db
+      - mlruns/
+    expire_in: 1 day
+  needs:
+    - job: preprocess_data
+      artifacts: true
+
+
+test_scripts:
+  stage: test
+  script:
+    - echo "Running tests..."
+    # Add your test commands here, e.g., pytest
+    # Example:
+    # - pip install pytest pytest-cov
+    # - pytest tests/ --cov=src
+    - echo "No tests configured yet. Please add tests."
+  needs:
+    - job: train_model
+      artifacts: true # If tests need models or preprocessor
+
+build_docker_image:
+  stage: build_docker
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - export GITLAB_IMAGE_NAME="$CI_REGISTRY_IMAGE"
+    - until docker info; do sleep 1; done
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    # Or Docker Hub (uncomment and set DOCKER_USERNAME, DOCKER_PASSWORD in CI/CD variables)
+    # - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $GITLAB_IMAGE_NAME:$CI_COMMIT_SHA -t $GITLAB_IMAGE_NAME:latest .
+    - echo "Pushing Docker image to GitLab Registry..."
+    - docker push $GITLAB_IMAGE_NAME:$CI_COMMIT_SHA
+    - docker push $GITLAB_IMAGE_NAME:latest
+    # - docker push $DOCKER_HUB_USERNAME/customer-churn-app:$CI_COMMIT_SHA # For Docker Hub
+    # - docker push $DOCKER_HUB_USERNAME/customer-churn-app:latest # For Docker Hub
+  needs:
+    - job: train_model # Ensure model and preprocessor are built before image
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+
+# deploy_staging:
+#   stage: deploy
+#   image: google/cloud-sdk:latest # Or your preferred deployment image
+#   script:
+#     - echo "Deploying to Staging..."
+#     # Add your deployment script here (e.g., kubectl apply, helm upgrade)
+#     # Example: kubectl set image deployment/churn-app-staging churn-app=$GITLAB_IMAGE_NAME:dev -n staging-namespace
+#   environment:
+#     name: staging
+#     url: http://staging.yourdomain.com # Optional: URL of the staging environment
+#   rules:
+#     - if: $CI_COMMIT_BRANCH == "develop"
+#       when: on_success
+#   needs:
+#     - build_docker_image
+
+# deploy_production:
+#   stage: deploy
+#   image: google/cloud-sdk:latest # Or your preferred deployment image
+#   script:
+#     - echo "Deploying to Production..."
+#     # Add your deployment script here
+#     # Example: kubectl set image deployment/churn-app-prod churn-app=$GITLAB_IMAGE_NAME:latest -n prod-namespace
+#   environment:
+#     name: production
+#     url: http://your-app.yourdomain.com # Optional: URL of the production environment
+#   rules:
+#     - if: $CI_COMMIT_BRANCH == "main"
+#       when: manual # Or 'on_success' for automatic deployment
+#   needs:
+#     - build_docker_image
