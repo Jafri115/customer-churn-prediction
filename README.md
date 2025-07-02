@@ -117,7 +117,7 @@ This is a simple web application built with Flask that allows a user to input cu
     *   Defines another route (`/predict`) that:
         *   Receives customer data from the HTML form.
         *   Formats this data into the JSON structure expected by the churn prediction API.
-        *   Sends a POST request to the churn prediction API (running on Kubernetes or Azure Container Apps).
+        *   Sends a POST request to the churn prediction API (running on Kubernetes ).
         *   Receives the prediction response from the API.
         *   Displays the prediction (Churn: Yes/No, Probability) back to the user on the web page.
     *   Includes error handling for API communication issues.
@@ -134,12 +134,12 @@ This is a simple web application built with Flask that allows a user to input cu
     *   Lists Python dependencies for the web app (Flask, Requests).
 
 5.  **`Dockerfile`:**
-    *   Instructions to build a Docker image for the Flask web application. This allows it to be deployed consistently anywhere Docker is supported, including Kubernetes or Azure Container Apps.
+    *   Instructions to build a Docker image for the Flask web application. This allows it to be deployed consistently anywhere Docker is supported, including Kubernetes .
 
 ### How it Works with the ML Pipeline:
 
 1.  The **ML Pipeline** trains a churn prediction model and saves it (e.g., `churn_model_xgb.pkl`) along with its preprocessor (`preprocessor.pkl`).
-2.  The FastAPI application (from the ML pipeline project) loads this model and preprocessor and exposes a `/predict` API endpoint. This API is then deployed (e.g., to Kubernetes or Azure Container Apps).
+2.  The FastAPI application (from the ML pipeline project) loads this model and preprocessor and exposes a `/predict` API endpoint. This API is then deployed (e.g., to Kubernetes).
 3.  The **Web Application** (`churn-prediction-webapp`) provides a user interface.
 4.  When a user enters customer data and submits the form, the web app's backend (Flask) sends this data to the `/predict` endpoint of the deployed ML API.
 5.  The ML API processes the data, makes a prediction, and returns the result to the web app.
@@ -148,7 +148,7 @@ This is a simple web application built with Flask that allows a user to input cu
 ### Running the Web App:
 
 *   **Locally (for development):**
-    *   Ensure the ML API is running (either locally or on Kubernetes/Azure Container Apps).
+    *   Ensure the ML API is running (either locally or on Kubernetes).
     *   Update the `CHURN_API_URL` in `app.py` or in a `.env` file to point to your running API.
     *   Navigate to the `churn-prediction-webapp` directory.
     *   Install dependencies: `pip install -r requirements.txt`
@@ -158,9 +158,6 @@ This is a simple web application built with Flask that allows a user to input cu
     *   Use the combined `docker-compose.yaml` in the main project root.
     *   Run `docker-compose up --build`.
     *   Access the web app at `http://localhost:5001`.
-*   **On Azure Container Apps:**
-    *   Build and push the Docker image for the web app.
-    *   Deploy it as a new Container App, ensuring the `CHURN_API_URL` environment variable points to the internal URL of your backend API Container App.
 
 ---
 
